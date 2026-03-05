@@ -1,10 +1,12 @@
 {
   "name": "crypto-verify-dapp",
-  "version": "1.0.0",
-  "description": "Blockchain Cryptographic Transaction Verification DApp CN6035",
+  "version": "2.0.0",
+  "description": "Multi-Chain Blockchain Transaction Verifier DApp CN6035",
   "scripts": {
     "compile": "hardhat compile",
-    "deploy": "hardhat run scripts/deploy.js --network sepolia"
+    "deploy": "hardhat run scripts/deploy.js --network sepolia",
+    "test": "hardhat test",
+    "server": "node backend/server.js"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-chai-matchers": "2.0.8",
@@ -15,9 +17,12 @@
     "hardhat": "2.22.17"
   },
   "dependencies": {
-    "axios": "^1.13.6",
     "cors": "2.8.5",
     "dotenv": "16.4.5",
-    "express": "4.21.2"
+    "ethers": "6.13.5",
+    "express": "4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
+    "node-fetch": "^3.3.2"
   }
 }
