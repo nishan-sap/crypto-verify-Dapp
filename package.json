@@ -1,31 +1,21 @@
 {
-  "name": "cn6035-blockchain",
+  "name": "crypto-verify-dapp",
   "version": "1.0.0",
-  "main": "index.js",
+  "description": "Blockchain Cryptographic Transaction Verification DApp CN6035",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "compile": "hardhat compile",
+    "deploy": "hardhat run scripts/deploy.js --network sepolia"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
   "devDependencies": {
-    "@nomicfoundation/hardhat-ignition": "^3.0.8",
-    "@nomicfoundation/hardhat-toolbox": "^7.0.0",
-    "@nomicfoundation/hardhat-toolbox-viem": "^5.0.2",
-    "@types/node": "^22.19.13",
-    "eslint": "^10.0.2",
-    "forge-std": "github:foundry-rs/forge-std#v1.9.4",
-    "hardhat": "^3.1.10",
-    "prettier": "^3.8.1",
-    "typescript": "~5.8.0",
-    "viem": "^2.47.0"
+    "hardhat": "2.22.17",
+    "@nomicfoundation/hardhat-ethers": "3.0.8",
+    "@nomicfoundation/hardhat-chai-matchers": "2.0.8",
+    "chai": "4.4.1",
+    "ethers": "6.13.5"
   },
   "dependencies": {
-    "cors": "^2.8.6",
-    "dotenv": "^17.3.1",
-    "ethers": "^6.16.0",
-    "express": "^5.2.1"
-  },
-  "type": "module"
+    "dotenv": "16.4.5",
+    "express": "4.21.2",
+    "cors": "2.8.5"
+  }
 }
