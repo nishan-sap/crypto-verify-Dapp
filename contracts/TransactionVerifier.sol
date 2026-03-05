@@ -109,15 +109,15 @@ contract TransactionVerifier {
             bool exists
         )
     {
-        Transaction memory tx = transactions[_txId];
+        Transaction memory txData = transactions[_txId];
         return (
-            tx.sender,
-            tx.receiver,
-            tx.amount,
-            tx.timestamp,
-            tx.message,
-            tx.exists
-        );
+        txData.sender,
+        txData.receiver,
+        txData.amount,
+        txData.timestamp,
+        txData.message,
+        txData.exists
+    );
     }
 
     /**
