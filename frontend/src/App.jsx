@@ -2,7 +2,9 @@ import { useState } from "react";
 import axios from "axios";
 import { ethers } from "ethers";
 
-const API = "http://localhost:5000/api/transactions";
+const API = window.location.hostname === "localhost" 
+  ? "http://localhost:5000/api/transactions"
+  : "https://sepolia-api-placeholder.com/api/transactions";
 const CONTRACT_ADDRESS = "0x04BDEeDE281D1c0b63449CAc4EDc30d9b2B369aE";
 
 const ABI = [
