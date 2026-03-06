@@ -312,7 +312,7 @@ export default function App() {
         const priority = fam?.chains?.length ? fam.chains : Object.keys(BLOCKSCOUT);
         const rest = Object.keys(BLOCKSCOUT).filter(c=>!priority.includes(c));
 
-        setExStatus(`Searching ${priority.length} chains in parallel...`);
+        setExStatus(`Searching chains in parallel...`);
         // Race all priority chains — return whichever finds it first
         const found = await raceFirst(priority.map(c=>evmLookupTx(c,hash)));
         if (found) { addRecent(hash, found.chain); return setExResult(found); }
@@ -422,7 +422,7 @@ export default function App() {
         <div style={s.heroEye}>{tab==="explorer"?"MULTI-CHAIN TRANSACTION EXPLORER":"WALLET TRANSACTION HISTORY"}</div>
         <h1 style={s.h1}>
           {tab==="explorer"
-            ? <><G>Search</G> any transaction<br/>across 10 blockchains</>
+            ? <><G>Search</G> any transaction<br/>across 11 blockchains</>
             : <><G>Track</G> any wallet<br/>across all chains</>}
         </h1>
         <p style={s.hp}>
@@ -533,29 +533,42 @@ export default function App() {
             <SectionHead icon="📋" title="Wallet Transaction History"
               sub="All chains searched simultaneously from your browser — no backend, no API key" />
 
-            <div style={s.infoBox}>
-              🌐 Auto-detects address type — EVM addresses search <strong>8 chains in parallel</strong>. Bitcoin, Solana, and Tron detected automatically.
-            </div>
-
-            <FieldLabel>Address type <OptTag>auto-detected from format</OptTag></FieldLabel>
-            <div style={s.famRow}>
-              {FAMILIES.map(f=>(
-                <button key={f.id}
-                  style={{...s.famBtn,...(whFam===f.id?{borderColor:f.color,background:`${f.color}12`,color:"#fff"}:{})}}
-                  onClick={()=>{setWhFam(f.id);setWhError("");setWhResult(null);}}>
-                  <span style={{color:whFam===f.id?f.color:"rgba(255,255,255,0.3)",fontSize:"0.9rem"}}>{f.icon}</span>
-                  <span style={{fontSize:"0.74rem",fontWeight:whFam===f.id?600:400}}>{f.label}</span>
-                </button>
+            {/* 11 supported chains — displayed as info pills, no interaction */}
+            <div style={s.chainGrid}>
+              {[
+                {name:"Ethereum",   icon:"⟠", color:"#627EEA"},
+                {name:"Sepolia",    icon:"⟠", color:"#627EEA"},
+                {name:"Base",       icon:"🔵", color:"#0052FF"},
+                {name:"Optimism",   icon:"🔴", color:"#FF0420"},
+                {name:"Arbitrum",   icon:"🔷", color:"#28A0F0"},
+                {name:"Linea",      icon:"◻", color:"#61DFFF"},
+                {name:"Polygon",    icon:"⬡", color:"#8247E5"},
+                {name:"BNB Chain",  icon:"◈", color:"#F0B90B"},
+                {name:"Bitcoin",    icon:"₿", color:"#F7931A"},
+                {name:"Solana",     icon:"◎", color:"#9945FF"},
+                {name:"Tron",       icon:"⬤", color:"#FF0013"},
+              ].map(c=>(
+                <div key={c.name} style={s.chainPill}>
+                  <span style={{color:c.color,fontSize:"0.85rem"}}>{c.icon}</span>
+                  <span style={{fontSize:"0.69rem",color:"rgba(255,255,255,0.5)"}}>{c.name}</span>
+                </div>
               ))}
             </div>
 
             <FieldLabel>
               Wallet Address
-              <HintTag>{whFam==="bitcoin"?"1.../3.../bc1...":whFam==="solana"?"Base58":whFam==="tron"?"T + 33":"0x + 40 hex"}</HintTag>
+              <HintTag>auto-detected — EVM · Bitcoin · Solana · Tron</HintTag>
             </FieldLabel>
+            <div style={{marginBottom:6,fontSize:"0.7rem",color:"rgba(255,255,255,0.2)"}}>
+              {addrInput.startsWith("0x")?"⟠ EVM address detected — will search all 8 EVM chains":
+               addrInput.match(/^(1|3|bc1)/)?"₿ Bitcoin address detected":
+               addrInput.startsWith("T")&&addrInput.length===34?"⬤ Tron address detected":
+               addrInput.length>30&&!addrInput.startsWith("0x")?"◎ Solana address detected":
+               "Paste any wallet address below — chain detected automatically"}
+            </div>
             <div style={s.iRow}>
               <input style={s.inp}
-                placeholder={whFam==="bitcoin"?"1A1zP1...":whFam==="solana"?"So11111...":whFam==="tron"?"TLa2f6...":"0x6Cc9397c3B38739..."}
+                placeholder="0x... or 1A1zP1... or So111... or TLa2f6..."
                 value={addrInput}
                 onChange={e=>{setAddrInput(e.target.value);setWhError("");setWhResult(null);}}
                 onKeyDown={e=>e.key==="Enter"&&loadWallet()}/>
@@ -567,8 +580,8 @@ export default function App() {
               )}
             </div>
 
-            <ActionBtn loading={whLoading} color={wFam?.color||"#4ade80"} onClick={loadWallet}>
-              {whLoading?"Searching all chains...":"Load Transaction History"}
+            <ActionBtn loading={whLoading} color="#4ade80" onClick={loadWallet}>
+              {whLoading?"Searching all 11 chains...":"Load Transaction History"}
             </ActionBtn>
 
             {whError&&<ErrBlock msg={whError}/>}
@@ -833,6 +846,8 @@ const s = {
   histSrc:{fontSize:"0.64rem",color:"rgba(255,255,255,0.16)"},
   empty:{textAlign:"center",padding:"28px 16px",color:"rgba(255,255,255,0.18)",fontSize:"0.8rem",lineHeight:1.8},
 
+  chainGrid:{display:"flex",flexWrap:"wrap",gap:6,marginBottom:20,marginTop:4},
+  chainPill:{display:"flex",alignItems:"center",gap:5,background:"rgba(255,255,255,0.025)",border:"1px solid rgba(255,255,255,0.06)",borderRadius:20,padding:"4px 10px"},
   filterRow:{display:"flex",gap:5,flexWrap:"wrap",marginBottom:12},
   filterBtn:{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)",color:"rgba(255,255,255,0.28)",borderRadius:6,padding:"4px 10px",fontSize:"0.67rem"},
   filterBtnOn:{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.16)",color:"#fff"},
