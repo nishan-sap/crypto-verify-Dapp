@@ -1,16 +1,16 @@
-const express = require("express");
-const cors = require("cors");
-const helmet = require("helmet");
+const express  = require("express");
+const cors     = require("cors");
+const helmet   = require("helmet");
 const rateLimit = require("express-rate-limit");
 require("dotenv").config();
 
 const app = express();
 
-// ── Security Headers ──────────────────────────────
+// ── 1. Security headers (OWASP recommended) ───────
 app.use(helmet());
 app.disable("x-powered-by");
 
-// ── CORS Whitelist ────────────────────────────────
+// ── 2. Strict CORS whitelist ──────────────────────
 app.use(cors({
   origin: [
     "http://localhost:5173",
@@ -21,43 +21,52 @@ app.use(cors({
   allowedHeaders: ["Content-Type"]
 }));
 
-// ── Body limit ────────────────────────────────────
+// ── 3. Body size limit (prevents payload attacks) ─
 app.use(express.json({ limit: "5kb" }));
 
-// ── Global rate limit: 100 req/min per IP ─────────
+// ── 4. Global rate limit: 100 req / min / IP ─────
 app.use(rateLimit({
   windowMs: 60 * 1000,
   max: 100,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Rate limit exceeded. Please wait." }
+  message: { error: "Rate limit exceeded. Max 100 requests per minute." }
 }));
 
-// ── Stricter limit for chain queries: 30/min ──────
+// ── 5. Tighter limit for blockchain calls: 30/min ─
 const chainLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 30,
-  message: { error: "Too many blockchain queries. Please slow down." }
+  message: { error: "Too many blockchain queries. Max 30 per minute." }
 });
 
 const txRoutes = require("./routes/transactions");
 app.use("/api/transactions", chainLimiter, txRoutes);
 
+// ── Health check ──────────────────────────────────
 app.get("/", (req, res) => {
   res.json({
-    status: "ChainVerify API v2.0",
-    chains: ["ethereum", "sepolia", "polygon", "bsc", "arbitrum", "base", "bitcoin"],
+    status: "CryptoVerify API v3.0 running",
+    security: ["helmet", "cors-whitelist", "rate-limiting", "input-validation"],
     endpoints: [
-      "GET /api/transactions/lookup/:chain/:txHash",
-      "GET /api/transactions/verify/:txId",
-      "GET /api/transactions/history/:wallet",
-      "GET /api/transactions/total"
+      "GET /api/transactions/lookup/:txHash   — auto-detect chain",
+      "GET /api/transactions/wallet/:address  — all chains auto-detected",
+      "GET /api/transactions/total            — DApp contract stat"
     ]
   });
 });
 
-app.use((req, res) => res.status(404).json({ error: "Not found" }));
-app.use((err, req, res, next) => res.status(500).json({ error: "Server error" }));
+// ── 404 ───────────────────────────────────────────
+app.use((req, res) => res.status(404).json({ error: "Endpoint not found" }));
+
+// ── Global error handler ──────────────────────────
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: "Internal server error" });
+});
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`ChainVerify API on http://localhost:${PORT}`));
+app.listen(PORT, () => {
+  console.log(`\n🚀 CryptoVerify API  →  http://localhost:${PORT}`);
+  console.log(`🔒 Security: helmet | cors | rate-limit | input-validation\n`);
+});
