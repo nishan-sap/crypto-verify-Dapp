@@ -401,75 +401,59 @@ function GasTracker() {
     async function fetchGas() {
       // All sources use GET requests — no CORS preflight issues from GitHub Pages
 
-      // Source 1: owlracle — free gas oracle, GET, CORS-open
-      try {
-        const r = await ft("https://owlracle.info/eth/gas?apikey=&feeinusd=false", {}, 8000);
-        if (r.ok) {
-          const d = await r.json();
-          if (d.speeds && mounted) {
-            setGas({
-              slow: Math.round(d.speeds[0]?.maxFeePerGas || d.speeds[0]?.gasPrice || 1),
-              avg:  Math.round(d.speeds[1]?.maxFeePerGas || d.speeds[1]?.gasPrice || 5),
-              fast: Math.round(d.speeds[3]?.maxFeePerGas || d.speeds[3]?.gasPrice || 10),
-            });
-            setLoading(false);
-            return;
-          }
+      // Helper: try to extract valid gwei value > 0
+      const trySet = (slow, avg, fast) => {
+        if (avg > 0 && mounted) {
+          setGas({ slow: Math.max(1, Math.round(slow)), avg: Math.max(1, Math.round(avg)), fast: Math.max(1, Math.round(fast)) });
+          setLoading(false);
+          return true;
         }
-      } catch {}
+        return false;
+      };
 
-      // Source 2: blocknative open API (no key needed for basic)
-      try {
-        const r = await ft("https://api.blocknative.com/gasprices/blockprices?confidenceLevels=70,90,99&unit=gwei", {
-          headers:{"Authorization":""}
-        }, 8000);
-        if (r.ok) {
-          const d = await r.json();
-          const bp = d.blockPrices?.[0]?.estimatedPrices;
-          if (bp && mounted) {
-            setGas({
-              slow: Math.round(bp[0]?.maxFeePerGas || 1),
-              avg:  Math.round(bp[1]?.maxFeePerGas || 5),
-              fast: Math.round(bp[2]?.maxFeePerGas || 10),
-            });
-            setLoading(false);
-            return;
-          }
-        }
-      } catch {}
-
-      // Source 3: Blockscout Ethereum — GET endpoint, no preflight
-      try {
-        const r = await ft("https://eth.blockscout.com/api/v1/gas-price-oracle", {}, 8000);
-        if (r.ok) {
-          const d = await r.json();
-          if (d.average && mounted) {
-            setGas({
-              slow: Math.round(parseFloat(d.slow || d.average)),
-              avg:  Math.round(parseFloat(d.average)),
-              fast: Math.round(parseFloat(d.fast || d.average * 1.3)),
-            });
-            setLoading(false);
-            return;
-          }
-        }
-      } catch {}
-
-      // Source 4: eth.blockscout legacy endpoint
+      // Source 1: Blockscout gas oracle (legacy GET, works from browsers)
       try {
         const r = await ft("https://eth.blockscout.com/api?module=gastracker&action=gasoracle", {}, 8000);
-        if (r.ok) {
-          const d = await r.json();
-          if (d.result?.ProposeGasPrice && mounted) {
-            setGas({
-              slow: Math.round(parseFloat(d.result.SafeGasPrice)),
-              avg:  Math.round(parseFloat(d.result.ProposeGasPrice)),
-              fast: Math.round(parseFloat(d.result.FastGasPrice)),
-            });
-            setLoading(false);
-            return;
-          }
+        const d = await r.json();
+        const s = parseFloat(d?.result?.SafeGasPrice||0);
+        const a = parseFloat(d?.result?.ProposeGasPrice||0);
+        const f = parseFloat(d?.result?.FastGasPrice||0);
+        if (trySet(s, a, f)) return;
+      } catch {}
+
+      // Source 2: Polygon Blockscout (different instance, same format)
+      try {
+        const r = await ft("https://polygon.blockscout.com/api?module=gastracker&action=gasoracle", {}, 8000);
+        const d = await r.json();
+        const s = parseFloat(d?.result?.SafeGasPrice||0);
+        const a = parseFloat(d?.result?.ProposeGasPrice||0);
+        const f = parseFloat(d?.result?.FastGasPrice||0);
+        if (trySet(s, a, f)) return;
+      } catch {}
+
+      // Source 3: owlracle public gas API
+      try {
+        const r = await ft("https://owlracle.info/eth/gas", {}, 8000);
+        const d = await r.json();
+        // owlracle returns speeds array with baseFee + tip fields
+        if (Array.isArray(d.speeds) && d.speeds.length >= 3) {
+          const toGwei = (s) => parseFloat(s?.maxFeePerGas || s?.gasPrice || s?.baseFee || 0);
+          const s = toGwei(d.speeds[0]);
+          const a = toGwei(d.speeds[1]);
+          const f = toGwei(d.speeds[2]);
+          if (trySet(s, a, f)) return;
         }
+      } catch {}
+
+      // Source 4: open-source gas station (no key)
+      try {
+        const r = await ft("https://gasstation.polygon.technology/v2", {}, 8000);
+        const d = await r.json();
+        // polygon gas station but useful for showing any live data
+        const s = parseFloat(d?.safeLow?.maxFee || 0);
+        const a = parseFloat(d?.standard?.maxFee || 0);
+        const f = parseFloat(d?.fast?.maxFee || 0);
+        if (trySet(s, a, f)) return;
       } catch {}
 
       if (mounted) setLoading(false);
