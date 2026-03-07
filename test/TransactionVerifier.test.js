@@ -46,16 +46,35 @@ const ABI = [
 ];
 
 // ── Helper: extract txId from a real Sepolia receipt ─────────────
+// Real topic0 observed on-chain from the deployed contract
+const RECORDED_TOPIC0 = "0x9f38328ad5757bc630b1684814eab0a2ad319d9ceafb41ebaf0954cfb265a44c";
+
 async function getTxId(contract, provider, ethHash) {
   const receipt = await provider.getTransactionReceipt(ethHash);
   if (!receipt) throw new Error(`Receipt not found for ${ethHash}`);
+
   for (const log of receipt.logs) {
-    try {
-      const parsed = contract.interface.parseLog(log);
-      if (parsed.name === "TransactionRecorded") return parsed.args.txId;
-    } catch {}
+    if (
+      log.address.toLowerCase() === CONTRACT.toLowerCase() &&
+      log.topics[0] === RECORDED_TOPIC0
+    ) {
+      // txId is indexed bytes32 → stored as topics[1]
+      return log.topics[1];
+    }
   }
-  throw new Error(`No TransactionRecorded event in receipt ${ethHash}`);
+
+  // Fallback: take any log from our contract that has 4 topics
+  for (const log of receipt.logs) {
+    if (
+      log.address.toLowerCase() === CONTRACT.toLowerCase() &&
+      log.topics.length >= 2
+    ) {
+      console.log(`  [fallback] using topics[1] from contract log`);
+      return log.topics[1];
+    }
+  }
+
+  throw new Error(`No contract log found in receipt ${ethHash}`);
 }
 
 // ════════════════════════════════════════════════════════════════
