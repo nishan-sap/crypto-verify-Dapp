@@ -36,7 +36,7 @@ contract TransactionVerifier {
         address indexed sender,
         address indexed receiver,
         uint256 amount,
-        uint256 timestamp
+        string message
     );
 
     // Constructor
@@ -87,8 +87,8 @@ contract TransactionVerifier {
         // Actually send the ETH to receiver
         _receiver.transfer(msg.value);
 
-        // Emit event
-        emit TransactionRecorded(txId, msg.sender, _receiver, msg.value, block.timestamp);
+        // Emit event with message
+        emit TransactionRecorded(txId, msg.sender, _receiver, msg.value, _message);
 
         return txId;
     }

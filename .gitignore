@@ -1,21 +1,32 @@
+# Dependencies
+node_modules/
+
+# Environment variables — NEVER commit these
 .env
-# Node modules
-/node_modules
+.env.local
+.env.*.local
 
-# Compilation output
-/dist
+# Hardhat build outputs
+artifacts/
+cache/
 
-# pnpm deploy output
-/bundle
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
 
-# Hardhat Build Artifacts
-/artifacts
+# OS files
+.DS_Store
+Thumbs.db
 
-# Hardhat compilation (v2) support directory
-/cache
-
-# Typechain output
-/types
-
-# Hardhat coverage reports
-/coverage
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
