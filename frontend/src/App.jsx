@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 // ══════════════════════════════════════════════════════════════
 // CryptoVerify — 100% client-side, no backend required
@@ -393,10 +393,10 @@ async function tronWalletHistory(addr) {
 // ══════════════════════════════════════════════════
 // ── GasTracker component ─────────────────────────────────────
 function GasTracker() {
-  const [gas, setGas] = React.useState(null);
-  const [loading, setLoading] = React.useState(true);
+  const [gas, setGas] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  React.useEffect(()=>{
+  useEffect(()=>{
     let mounted = true;
     async function fetchGas() {
       try {
