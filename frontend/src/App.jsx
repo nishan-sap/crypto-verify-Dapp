@@ -430,23 +430,30 @@ function GasTracker() {
     return ()=>{ mounted=false; clearInterval(interval); };
   },[]);
 
-  if (loading || !gas) return null;
-
-  const gasColor = gas.avg < 10 ? "#4ade80" : gas.avg < 30 ? "#facc15" : gas.avg < 80 ? "#fb923c" : "#f87171";
+  const gasColor = !gas ? "#666" : gas.avg < 10 ? "#4ade80" : gas.avg < 30 ? "#facc15" : gas.avg < 80 ? "#fb923c" : "#f87171";
 
   return (
     <div style={{
       display:"flex", alignItems:"center", gap:6,
-      background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)",
-      borderRadius:20, padding:"4px 10px", fontSize:"0.7rem",
+      background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.1)",
+      borderRadius:20, padding:"5px 12px", fontSize:"0.72rem",
       color:"rgba(255,255,255,0.6)", whiteSpace:"nowrap", flexShrink:0,
+      marginLeft:"auto",
     }}>
-      <span style={{color:gasColor, fontSize:"0.6rem"}}>⬡</span>
-      <span style={{color:gasColor, fontWeight:600}}>{gas.avg}</span>
-      <span style={{color:"rgba(255,255,255,0.35)"}}>Gwei</span>
-      <span style={{color:"rgba(255,255,255,0.25)", margin:"0 2px"}}>|</span>
-      <span title="Slow">{gas.slow}↓</span>
-      <span title="Fast" style={{color:gasColor}}>{gas.fast}↑</span>
+      <span style={{color:gasColor}}>⬡</span>
+      <span style={{color:"rgba(255,255,255,0.4)", fontSize:"0.65rem", letterSpacing:1}}>GAS</span>
+      {loading ? (
+        <span style={{color:"rgba(255,255,255,0.3)"}}>...</span>
+      ) : !gas ? (
+        <span style={{color:"rgba(255,255,255,0.3)"}}>unavailable</span>
+      ) : (
+        <>
+          <span style={{color:gasColor, fontWeight:700}}>{gas.avg}</span>
+          <span style={{color:"rgba(255,255,255,0.3)"}}>Gwei</span>
+          <span style={{color:"rgba(255,255,255,0.2)", margin:"0 1px"}}>|</span>
+          <span style={{color:"rgba(255,255,255,0.4)"}} title="Slow / Fast">{gas.slow}–{gas.fast}</span>
+        </>
+      )}
     </div>
   );
 }
