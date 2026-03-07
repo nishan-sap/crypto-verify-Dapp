@@ -399,66 +399,80 @@ function GasTracker() {
   useEffect(()=>{
     let mounted = true;
     async function fetchGas() {
-      // Try multiple sources in order until one works
-      const sources = [
-        // 1. Cloudflare ETH RPC — most reliable, no CORS issues
-        async () => {
-          const r = await ft("https://cloudflare-eth.com", {
-            method:"POST", headers:{"Content-Type":"application/json"},
-            body: JSON.stringify({jsonrpc:"2.0",id:1,method:"eth_gasPrice",params:[]})
-          }, 8000);
-          const d = await r.json();
-          if (!d.result) throw new Error("no result");
-          const gwei = Math.round(parseInt(d.result,16)/1e9);
-          return {slow:Math.max(1,gwei-3), avg:gwei, fast:gwei+5};
-        },
-        // 2. Ankr public RPC
-        async () => {
-          const r = await ft("https://rpc.ankr.com/eth", {
-            method:"POST", headers:{"Content-Type":"application/json"},
-            body: JSON.stringify({jsonrpc:"2.0",id:1,method:"eth_gasPrice",params:[]})
-          }, 8000);
-          const d = await r.json();
-          if (!d.result) throw new Error("no result");
-          const gwei = Math.round(parseInt(d.result,16)/1e9);
-          return {slow:Math.max(1,gwei-3), avg:gwei, fast:gwei+5};
-        },
-        // 3. eth_feeHistory for more accurate base fee
-        async () => {
-          const r = await ft("https://cloudflare-eth.com", {
-            method:"POST", headers:{"Content-Type":"application/json"},
-            body: JSON.stringify({jsonrpc:"2.0",id:1,method:"eth_feeHistory",
-              params:["0x5","latest",[10,50,90]]})
-          }, 8000);
-          const d = await r.json();
-          if (!d.result) throw new Error("no result");
-          const baseFees = d.result.baseFeePerGas || [];
-          const latest = parseInt(baseFees[baseFees.length-1]||"0x1",16)/1e9;
-          const rewards = d.result.reward || [];
-          const p10 = rewards.map(r=>parseInt(r[0]||"0x0",16)/1e9);
-          const p90 = rewards.map(r=>parseInt(r[2]||"0x0",16)/1e9);
-          const avgP10 = p10.reduce((a,b)=>a+b,0)/Math.max(p10.length,1);
-          const avgP90 = p90.reduce((a,b)=>a+b,0)/Math.max(p90.length,1);
-          const base = Math.round(latest);
-          return {
-            slow: Math.max(1, Math.round(base + avgP10)),
-            avg:  Math.max(1, Math.round(base + (avgP10+avgP90)/2)),
-            fast: Math.max(1, Math.round(base + avgP90)),
-          };
-        },
-      ];
+      // All sources use GET requests — no CORS preflight issues from GitHub Pages
 
-      for (const source of sources) {
-        try {
-          const result = await source();
-          if (mounted && result.avg > 0) {
-            setGas(result);
+      // Source 1: owlracle — free gas oracle, GET, CORS-open
+      try {
+        const r = await ft("https://owlracle.info/eth/gas?apikey=&feeinusd=false", {}, 8000);
+        if (r.ok) {
+          const d = await r.json();
+          if (d.speeds && mounted) {
+            setGas({
+              slow: Math.round(d.speeds[0]?.maxFeePerGas || d.speeds[0]?.gasPrice || 1),
+              avg:  Math.round(d.speeds[1]?.maxFeePerGas || d.speeds[1]?.gasPrice || 5),
+              fast: Math.round(d.speeds[3]?.maxFeePerGas || d.speeds[3]?.gasPrice || 10),
+            });
             setLoading(false);
             return;
           }
-        } catch {}
-      }
-      if (mounted) setLoading(false); // all failed — show unavailable
+        }
+      } catch {}
+
+      // Source 2: blocknative open API (no key needed for basic)
+      try {
+        const r = await ft("https://api.blocknative.com/gasprices/blockprices?confidenceLevels=70,90,99&unit=gwei", {
+          headers:{"Authorization":""}
+        }, 8000);
+        if (r.ok) {
+          const d = await r.json();
+          const bp = d.blockPrices?.[0]?.estimatedPrices;
+          if (bp && mounted) {
+            setGas({
+              slow: Math.round(bp[0]?.maxFeePerGas || 1),
+              avg:  Math.round(bp[1]?.maxFeePerGas || 5),
+              fast: Math.round(bp[2]?.maxFeePerGas || 10),
+            });
+            setLoading(false);
+            return;
+          }
+        }
+      } catch {}
+
+      // Source 3: Blockscout Ethereum — GET endpoint, no preflight
+      try {
+        const r = await ft("https://eth.blockscout.com/api/v1/gas-price-oracle", {}, 8000);
+        if (r.ok) {
+          const d = await r.json();
+          if (d.average && mounted) {
+            setGas({
+              slow: Math.round(parseFloat(d.slow || d.average)),
+              avg:  Math.round(parseFloat(d.average)),
+              fast: Math.round(parseFloat(d.fast || d.average * 1.3)),
+            });
+            setLoading(false);
+            return;
+          }
+        }
+      } catch {}
+
+      // Source 4: eth.blockscout legacy endpoint
+      try {
+        const r = await ft("https://eth.blockscout.com/api?module=gastracker&action=gasoracle", {}, 8000);
+        if (r.ok) {
+          const d = await r.json();
+          if (d.result?.ProposeGasPrice && mounted) {
+            setGas({
+              slow: Math.round(parseFloat(d.result.SafeGasPrice)),
+              avg:  Math.round(parseFloat(d.result.ProposeGasPrice)),
+              fast: Math.round(parseFloat(d.result.FastGasPrice)),
+            });
+            setLoading(false);
+            return;
+          }
+        }
+      } catch {}
+
+      if (mounted) setLoading(false);
     }
     fetchGas();
     const interval = setInterval(fetchGas, 30000); // refresh every 30s
