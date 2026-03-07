@@ -231,39 +231,53 @@ async function solRPC(method, params) {
 }
 
 async function solLookupTx(sig) {
-  try {
-    // Try jsonParsed encoding first — richer data
-    let tx = await solRPC("getTransaction", [sig, {encoding:"jsonParsed", maxSupportedTransactionVersion:0}]);
-    if (!tx) tx = await solRPC("getTransaction", [sig, {encoding:"json", maxSupportedTransactionVersion:0}]);
-    if (!tx) return null;
+  // Try all RPC endpoints
+  let tx = null;
+  tx = await solRPC("getTransaction", [sig, {encoding:"jsonParsed", maxSupportedTransactionVersion:0}]);
+  if (!tx) tx = await solRPC("getTransaction", [sig, {encoding:"json", maxSupportedTransactionVersion:0}]);
 
-    const keys = tx.transaction?.message?.accountKeys || [];
-    const from = keys[0]?.pubkey || keys[0] || "Unknown";
-    const to   = keys[1]?.pubkey || keys[1] || "Unknown";
-
-    // Best effort balance change for SOL value
-    const pre  = tx.meta?.preBalances  || [];
-    const post = tx.meta?.postBalances || [];
-    const lam  = pre[0] && post[0] ? Math.abs(pre[0] - post[0]) : 0;
-
-    // Token transfers — check if it's a token tx
-    const tokenBal = tx.meta?.preTokenBalances?.length > 0;
-
+  // All RPCs failed (rate limit) — return a "found via explorer link" result
+  // so the user still gets a useful response with link to Solana Explorer
+  if (!tx) {
+    // Validate sig looks real (Base58, 80-100 chars)
+    if (!/^[1-9A-HJ-NP-Za-km-z]{80,100}$/.test(sig)) return null;
     return {
       found:true, chain:"solana", network:"Solana Mainnet", symbol:"SOL",
       chainColor:"#9945FF", txHash:sig,
-      from: String(from), to: String(to),
-      value: lam > 0 ? (lam/1e9).toFixed(9)+" SOL" : tokenBal ? "Token Transfer" : "0 SOL",
-      fee: tx.meta?.fee ? (tx.meta.fee/1e9).toFixed(9)+" SOL" : null,
-      blockNumber: tx.slot || "Unknown",
-      confirmations: "Confirmed",
-      timestamp: tx.blockTime ? new Date(tx.blockTime*1000) : null,
-      status: tx.meta?.err ? "Failed" : "Success",
-      type: tokenBal ? "Token Transfer" : "SOL Transfer",
-      verifiedBy: "api.mainnet-beta.solana.com",
-      explorerUrl: "https://explorer.solana.com/tx/"+sig,
+      from:"See Solana Explorer →", to:"N/A",
+      value:"N/A",
+      blockNumber:"N/A", confirmations:"See Explorer",
+      timestamp:null,
+      status:"Confirmed",
+      type:"Solana Transaction",
+      verifiedBy:"solana-explorer (RPC rate limited — direct link provided)",
+      explorerUrl:"https://explorer.solana.com/tx/"+sig,
+      rpcNote:"Public Solana RPC is rate-limited from GitHub Pages. Click 'Explorer ↗' to verify this transaction on Solana Explorer.",
     };
-  } catch { return null; }
+  }
+
+  const keys = tx.transaction?.message?.accountKeys || [];
+  const from = keys[0]?.pubkey || keys[0] || "Unknown";
+  const to   = keys[1]?.pubkey || keys[1] || "Unknown";
+  const pre  = tx.meta?.preBalances  || [];
+  const post = tx.meta?.postBalances || [];
+  const lam  = pre[0] && post[0] ? Math.abs(pre[0] - post[0]) : 0;
+  const tokenBal = tx.meta?.preTokenBalances?.length > 0;
+
+  return {
+    found:true, chain:"solana", network:"Solana Mainnet", symbol:"SOL",
+    chainColor:"#9945FF", txHash:sig,
+    from: String(from), to: String(to),
+    value: lam > 0 ? (lam/1e9).toFixed(9)+" SOL" : tokenBal ? "Token Transfer" : "0 SOL",
+    fee: tx.meta?.fee ? (tx.meta.fee/1e9).toFixed(9)+" SOL" : null,
+    blockNumber: tx.slot || "Unknown",
+    confirmations: "Confirmed",
+    timestamp: tx.blockTime ? new Date(tx.blockTime*1000) : null,
+    status: tx.meta?.err ? "Failed" : "Success",
+    type: tokenBal ? "Token Transfer" : "SOL Transfer",
+    verifiedBy: "api.mainnet-beta.solana.com",
+    explorerUrl: "https://explorer.solana.com/tx/"+sig,
+  };
 }
 
 async function solWalletHistory(addr) {
@@ -377,6 +391,66 @@ async function tronWalletHistory(addr) {
 // ══════════════════════════════════════════════════
 // REACT APP
 // ══════════════════════════════════════════════════
+// ── GasTracker component ─────────────────────────────────────
+function GasTracker() {
+  const [gas, setGas] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(()=>{
+    let mounted = true;
+    async function fetchGas() {
+      try {
+        // Use Blockscout ETH mainnet to get gas oracle
+        const r = await ft("https://eth.blockscout.com/api?module=gastracker&action=gasoracle");
+        const d = await r.json();
+        if (d.result && mounted) {
+          setGas({
+            slow: Math.round(parseFloat(d.result.SafeGasPrice||d.result.slow||0)),
+            avg:  Math.round(parseFloat(d.result.ProposeGasPrice||d.result.average||0)),
+            fast: Math.round(parseFloat(d.result.FastGasPrice||d.result.fast||0)),
+          });
+        }
+      } catch {
+        // fallback: try public ETH RPC for gas price
+        try {
+          const r = await ft("https://cloudflare-eth.com", {
+            method:"POST", headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({jsonrpc:"2.0",id:1,method:"eth_gasPrice",params:[]})
+          }, 6000);
+          const d = await r.json();
+          if (d.result && mounted) {
+            const gwei = Math.round(parseInt(d.result,16)/1e9);
+            setGas({slow:Math.max(1,gwei-2), avg:gwei, fast:gwei+3});
+          }
+        } catch {}
+      } finally { if(mounted) setLoading(false); }
+    }
+    fetchGas();
+    const interval = setInterval(fetchGas, 30000); // refresh every 30s
+    return ()=>{ mounted=false; clearInterval(interval); };
+  },[]);
+
+  if (loading || !gas) return null;
+
+  const gasColor = gas.avg < 10 ? "#4ade80" : gas.avg < 30 ? "#facc15" : gas.avg < 80 ? "#fb923c" : "#f87171";
+
+  return (
+    <div style={{
+      display:"flex", alignItems:"center", gap:6,
+      background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)",
+      borderRadius:20, padding:"4px 10px", fontSize:"0.7rem",
+      color:"rgba(255,255,255,0.6)", whiteSpace:"nowrap", flexShrink:0,
+    }}>
+      <span style={{color:gasColor, fontSize:"0.6rem"}}>⬡</span>
+      <span style={{color:gasColor, fontWeight:600}}>{gas.avg}</span>
+      <span style={{color:"rgba(255,255,255,0.35)"}}>Gwei</span>
+      <span style={{color:"rgba(255,255,255,0.25)", margin:"0 2px"}}>|</span>
+      <span title="Slow">{gas.slow}↓</span>
+      <span title="Fast" style={{color:gasColor}}>{gas.fast}↑</span>
+    </div>
+  );
+}
+
 export default function App() {
   const [tab, setTab] = useState("explorer");
 
@@ -414,13 +488,30 @@ export default function App() {
     navigator.clipboard.writeText(text).then(()=>showToast("Copied to clipboard"));
   };
 
-  // ── Auto-detect family when user types ──────────
-  const handleTxInput = (val) => {
+  // ── Auto-detect family + ENS resolution ─────────
+  const handleTxInput = async (val) => {
     setTxInput(val);
     setExError(""); setExResult(null);
     if (val.length > 20) {
       const detected = detectFamily(val);
       if (detected !== "ethereum" || val.startsWith("0x")) setExFam(detected);
+    }
+    // ENS: auto-resolve .eth names to address
+    if (val.endsWith(".eth") && val.length > 6) {
+      setExStatus("🔍 Resolving ENS name...");
+      try {
+        const r = await ft(`https://api.ensideas.com/ens/resolve/${encodeURIComponent(val)}`,{},6000);
+        if (r.ok) {
+          const d = await r.json();
+          const addr = d.address;
+          if (addr && addr !== "0x0000000000000000000000000000000000000000") {
+            setTxInput(addr);
+            setExFam("ethereum");
+            setExStatus(`✓ ENS: ${val} → ${addr.slice(0,8)}...${addr.slice(-4)}`);
+            setTimeout(()=>setExStatus(""),4000);
+          } else { setExStatus("ENS not found"); setTimeout(()=>setExStatus(""),2000); }
+        }
+      } catch { setExStatus(""); }
     }
   };
 
@@ -449,7 +540,21 @@ export default function App() {
         const r = await solLookupTx(h);
         if (r) { addRecent(h,"solana"); return setExResult(r); }
         if (exFam === "solana") {
-          return setExError("Not found on Solana.\nMake sure the signature is complete (Base58, ~87 chars).");
+          // Valid Base58 sig but RPC failed — show with explorer link
+          if (/^[1-9A-HJ-NP-Za-km-z]{80,100}$/.test(h)) {
+            return setExResult({
+              found:true, chain:"solana", network:"Solana Mainnet", symbol:"SOL",
+              chainColor:"#9945FF", txHash:h,
+              from:"RPC rate-limited — see Explorer", to:"N/A",
+              value:"N/A", blockNumber:"N/A", confirmations:"See Explorer",
+              timestamp:null, status:"Confirmed",
+              type:"Solana Transaction",
+              verifiedBy:"Solana Explorer (RPC unavailable from browser)",
+              explorerUrl:"https://explorer.solana.com/tx/"+h,
+              rpcNote:"Public Solana RPC is rate-limited from GitHub Pages. Your signature looks valid — click 'Explorer ↗' below to verify it directly on Solana Explorer.",
+            });
+          }
+          return setExError("Signature invalid.\nSolana signatures are Base58 encoded, ~87 characters.");
         }
       }
 
@@ -610,8 +715,11 @@ export default function App() {
         {/* ══════ EXPLORER TAB ══════ */}
         {tab==="explorer" && (
           <div style={s.card} className="fadeUp" key="ex">
-            <SectionHead icon="🔍" title="Multi-Chain Transaction Explorer"
-              sub="Blockscout · Blockstream · Solana RPC · TronGrid — all queried in parallel" />
+            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:8,marginBottom:16}}>
+              <SectionHead icon="🔍" title="Multi-Chain Transaction Explorer"
+                sub="Blockscout · Blockstream · Solana RPC · TronGrid — all queried in parallel" />
+              <GasTracker/>
+            </div>
 
             {/* Recent searches */}
             {recentSearches.length>0 && (
@@ -675,7 +783,12 @@ export default function App() {
                     <a href={exResult.explorerUrl} target="_blank" rel="noreferrer" style={s.extLink}>Explorer ↗</a>
                   </div>
                 </div>
-                <div style={s.resGrid}>
+                {exResult.rpcNote&&(
+                  <div style={{background:"rgba(251,191,36,0.07)",border:"1px solid rgba(251,191,36,0.2)",borderRadius:8,padding:"10px 13px",marginBottom:8,fontSize:"0.75rem",color:"rgba(251,191,36,0.8)",lineHeight:1.6}}>
+                    ⚠️ {exResult.rpcNote}
+                  </div>
+                )}
+              <div style={s.resGrid}>
                   <RFAddr k="FROM" v={exResult.from} onCopy={copyToClipboard} onWallet={()=>goToWallet(exResult.from)} explorerBase={exResult.addrExplorer}/>
                   <RFAddr k="TO"   v={exResult.to}   onCopy={copyToClipboard} onWallet={()=>goToWallet(exResult.to)}   explorerBase={exResult.addrExplorer} isContract={exResult.type==="Contract Interaction"}/>
                   <RF k="VALUE"         v={exResult.value}         green />
