@@ -145,87 +145,168 @@ async function btcWalletHistory(addr) {
   } catch { return []; }
 }
 
-// ── Solana ────────────────────────────────────────
+// ── Solana — tries multiple public RPC endpoints ──
+const SOL_RPCS = [
+  "https://api.mainnet-beta.solana.com",
+  "https://solana-mainnet.g.alchemy.com/v2/demo",
+  "https://rpc.ankr.com/solana",
+];
+
+async function solRPC(method, params) {
+  for (const url of SOL_RPCS) {
+    try {
+      const r = await ft(url, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({jsonrpc:"2.0", id:1, method, params})
+      }, 10000);
+      const d = await r.json();
+      if (d.result !== undefined && d.result !== null) return d.result;
+    } catch {}
+  }
+  return null;
+}
+
 async function solLookupTx(sig) {
   try {
-    const r = await ft("https://api.mainnet-beta.solana.com",{
-      method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({jsonrpc:"2.0",id:1,method:"getTransaction",
-        params:[sig,{encoding:"json",maxSupportedTransactionVersion:0}]})
-    });
-    const d = await r.json();
-    if (!d.result) return null;
-    const tx=d.result;
-    const lam=tx.meta?Math.abs((tx.meta.preBalances[0]||0)-(tx.meta.postBalances[0]||0)):0;
+    // Try jsonParsed encoding first — richer data
+    let tx = await solRPC("getTransaction", [sig, {encoding:"jsonParsed", maxSupportedTransactionVersion:0}]);
+    if (!tx) tx = await solRPC("getTransaction", [sig, {encoding:"json", maxSupportedTransactionVersion:0}]);
+    if (!tx) return null;
+
+    const keys = tx.transaction?.message?.accountKeys || [];
+    const from = keys[0]?.pubkey || keys[0] || "Unknown";
+    const to   = keys[1]?.pubkey || keys[1] || "Unknown";
+
+    // Best effort balance change for SOL value
+    const pre  = tx.meta?.preBalances  || [];
+    const post = tx.meta?.postBalances || [];
+    const lam  = pre[0] && post[0] ? Math.abs(pre[0] - post[0]) : 0;
+
+    // Token transfers — check if it's a token tx
+    const tokenBal = tx.meta?.preTokenBalances?.length > 0;
+
     return {
-      found:true,chain:"solana",network:"Solana Mainnet",symbol:"SOL",
-      chainColor:"#9945FF",txHash:sig,
-      from:tx.transaction?.message?.accountKeys?.[0]||"Unknown",
-      to:tx.transaction?.message?.accountKeys?.[1]||"Unknown",
-      value:(lam/1e9).toFixed(9)+" SOL",
-      fee:tx.meta?.fee?(tx.meta.fee/1e9).toFixed(9)+" SOL":null,
-      blockNumber:tx.slot||"Unknown",confirmations:"Confirmed",
-      timestamp:tx.blockTime?new Date(tx.blockTime*1000):null,
-      status:tx.meta?.err?"Failed":"Success",
-      type:"Solana Transaction",
-      verifiedBy:"api.mainnet-beta.solana.com",
-      explorerUrl:"https://explorer.solana.com/tx/"+sig,
+      found:true, chain:"solana", network:"Solana Mainnet", symbol:"SOL",
+      chainColor:"#9945FF", txHash:sig,
+      from: String(from), to: String(to),
+      value: lam > 0 ? (lam/1e9).toFixed(9)+" SOL" : tokenBal ? "Token Transfer" : "0 SOL",
+      fee: tx.meta?.fee ? (tx.meta.fee/1e9).toFixed(9)+" SOL" : null,
+      blockNumber: tx.slot || "Unknown",
+      confirmations: "Confirmed",
+      timestamp: tx.blockTime ? new Date(tx.blockTime*1000) : null,
+      status: tx.meta?.err ? "Failed" : "Success",
+      type: tokenBal ? "Token Transfer" : "SOL Transfer",
+      verifiedBy: "api.mainnet-beta.solana.com",
+      explorerUrl: "https://explorer.solana.com/tx/"+sig,
     };
   } catch { return null; }
 }
 
 async function solWalletHistory(addr) {
   try {
-    const r = await ft("https://api.mainnet-beta.solana.com",{
-      method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({jsonrpc:"2.0",id:1,method:"getSignaturesForAddress",params:[addr,{limit:15}]})
-    });
-    const d = await r.json();
-    return (d.result||[]).map(s=>({
-      hash:s.signature,status:s.err?"Failed":"Success",
-      timestamp:s.blockTime?new Date(s.blockTime*1000):null,
-      type:"Solana Transaction",chain:"solana",network:"Solana Mainnet",chainColor:"#9945FF",
-      explorerUrl:"https://explorer.solana.com/tx/"+s.signature,
+    const sigs = await solRPC("getSignaturesForAddress", [addr, {limit:15}]);
+    if (!sigs) return [];
+    return sigs.map(s=>({
+      hash: s.signature,
+      status: s.err ? "Failed" : "Success",
+      timestamp: s.blockTime ? new Date(s.blockTime*1000) : null,
+      type: "Solana Transaction",
+      chain:"solana", network:"Solana Mainnet", chainColor:"#9945FF",
+      explorerUrl: "https://explorer.solana.com/tx/"+s.signature,
     }));
   } catch { return []; }
 }
 
-// ── Tron ──────────────────────────────────────────
+// ── Tron — multiple endpoints with fallback ────────
 async function tronLookupTx(hash) {
+  // Strip 0x prefix if present
+  const h = hash.replace(/^0x/, "");
+
+  // Try TronGrid REST v1
   try {
-    const r = await ft(`https://api.trongrid.io/v1/transactions/${hash}`);
-    if (!r.ok) return null;
-    const d = await r.json();
-    if (!d.data?.[0]) return null;
-    const tx=d.data[0];
-    const amt=tx.raw_data?.contract?.[0]?.parameter?.value?.amount||0;
-    return {
-      found:true,chain:"tron",network:"Tron Mainnet",symbol:"TRX",
-      chainColor:"#FF0013",txHash:hash,
-      from:tx.raw_data?.contract?.[0]?.parameter?.value?.owner_address||"Unknown",
-      to:tx.raw_data?.contract?.[0]?.parameter?.value?.to_address||"Unknown",
-      value:(amt/1e6).toFixed(6)+" TRX",
-      blockNumber:tx.blockNumber||"Unknown",confirmations:"Confirmed",
-      timestamp:tx.block_timestamp?new Date(tx.block_timestamp):null,
-      status:tx.ret?.[0]?.contractRet==="SUCCESS"?"Success":"Failed",
-      type:"TRX Transfer",
-      verifiedBy:"api.trongrid.io",
-      explorerUrl:"https://tronscan.org/#/transaction/"+hash,
-    };
-  } catch { return null; }
+    const r = await ft(`https://api.trongrid.io/v1/transactions/${h}`, {
+      headers:{"TRON-PRO-API-KEY":""}
+    }, 10000);
+    if (r.ok) {
+      const d = await r.json();
+      if (d.data?.[0]) {
+        const tx  = d.data[0];
+        const con = tx.raw_data?.contract?.[0];
+        const val = con?.parameter?.value || {};
+        const amt = val.amount || val.call_value || 0;
+        const typ = con?.type || "Unknown";
+        return {
+          found:true, chain:"tron", network:"Tron Mainnet", symbol:"TRX",
+          chainColor:"#FF0013", txHash:h,
+          from: val.owner_address || "Unknown",
+          to:   val.to_address || val.contract_address || "Unknown",
+          value: amt > 0 ? (amt/1e6).toFixed(6)+" TRX" : "0 TRX",
+          blockNumber: tx.blockNumber || "Unknown",
+          confirmations: "Confirmed",
+          timestamp: tx.block_timestamp ? new Date(tx.block_timestamp) : null,
+          status: tx.ret?.[0]?.contractRet === "SUCCESS" ? "Success" : "Failed",
+          type: typ === "TransferContract" ? "TRX Transfer" : typ === "TriggerSmartContract" ? "Contract Call" : "Tron Transaction",
+          verifiedBy: "api.trongrid.io",
+          explorerUrl: "https://tronscan.org/#/transaction/"+h,
+        };
+      }
+    }
+  } catch {}
+
+  // Fallback: TronGrid wallet/gettransactionbyid
+  try {
+    const r = await ft("https://api.trongrid.io/wallet/gettransactionbyid", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({value: h})
+    }, 10000);
+    if (r.ok) {
+      const tx = await r.json();
+      if (tx?.txID) {
+        const con = tx.raw_data?.contract?.[0];
+        const val = con?.parameter?.value || {};
+        const amt = val.amount || 0;
+        return {
+          found:true, chain:"tron", network:"Tron Mainnet", symbol:"TRX",
+          chainColor:"#FF0013", txHash:h,
+          from: val.owner_address || "Unknown",
+          to:   val.to_address || "Unknown",
+          value: amt > 0 ? (amt/1e6).toFixed(6)+" TRX" : "0 TRX",
+          blockNumber: "Confirmed", confirmations: "Confirmed",
+          timestamp: tx.raw_data?.timestamp ? new Date(tx.raw_data.timestamp) : null,
+          status: tx.ret?.[0]?.contractRet === "SUCCESS" ? "Success" : "Failed",
+          type: "TRX Transfer",
+          verifiedBy: "api.trongrid.io",
+          explorerUrl: "https://tronscan.org/#/transaction/"+h,
+        };
+      }
+    }
+  } catch {}
+
+  return null;
 }
 
 async function tronWalletHistory(addr) {
   try {
-    const r = await ft(`https://api.trongrid.io/v1/accounts/${addr}/transactions?limit=15`);
+    const r = await ft(
+      `https://api.trongrid.io/v1/accounts/${addr}/transactions?limit=15&only_confirmed=true`,
+      {headers:{"TRON-PRO-API-KEY":""}}, 10000
+    );
     if (!r.ok) return [];
     const d = await r.json();
-    return (d.data||[]).map(tx=>({
-      hash:tx.txID,
-      status:tx.ret?.[0]?.contractRet==="SUCCESS"?"Success":"Failed",
-      type:"TRX Transfer",chain:"tron",network:"Tron Mainnet",chainColor:"#FF0013",
-      explorerUrl:"https://tronscan.org/#/transaction/"+tx.txID,
-    }));
+    return (d.data||[]).map(tx=>{
+      const val = tx.raw_data?.contract?.[0]?.parameter?.value || {};
+      const amt = val.amount || 0;
+      return {
+        hash: tx.txID,
+        from: val.owner_address || "Unknown",
+        to:   val.to_address || "Unknown",
+        value: amt > 0 ? (amt/1e6).toFixed(6)+" TRX" : "TRX Tx",
+        status: tx.ret?.[0]?.contractRet === "SUCCESS" ? "Success" : "Failed",
+        type: "TRX Transfer",
+        chain:"tron", network:"Tron Mainnet", chainColor:"#FF0013",
+        explorerUrl: "https://tronscan.org/#/transaction/"+tx.txID,
+      };
+    });
   } catch { return []; }
 }
 
@@ -289,46 +370,73 @@ export default function App() {
     const isSol = /^[1-9A-HJ-NP-Za-km-z]{80,100}$/.test(hash);
 
     try {
-      // BTC
-      if (exFam==="bitcoin"||isBTC) {
-        setExStatus("Searching Bitcoin...");
-        const r = await btcLookupTx(hash.replace("0x",""));
-        if (r) { addRecent(hash,"bitcoin"); return setExResult(r); }
+      const h = hash.trim();
+
+      // ── If user selected Tron explicitly — try Tron first ──
+      if (exFam === "tron") {
+        setExStatus("Searching Tron Mainnet...");
+        const r = await tronLookupTx(h.replace(/^0x/,""));
+        if (r) { addRecent(h,"tron"); return setExResult(r); }
       }
-      // Solana
-      if (exFam==="solana"||isSol) {
-        setExStatus("Searching Solana...");
-        const r = await solLookupTx(hash);
-        if (r) { addRecent(hash,"solana"); return setExResult(r); }
+
+      // ── If user selected Solana explicitly ──
+      if (exFam === "solana" || isSol) {
+        setExStatus("Searching Solana Mainnet...");
+        const r = await solLookupTx(h);
+        if (r) { addRecent(h,"solana"); return setExResult(r); }
+        if (exFam === "solana") {
+          return setExError("Not found on Solana.\nMake sure the signature is complete (Base58, ~87 chars).");
+        }
       }
-      // Tron
-      if (exFam==="tron"||isBTC) {
-        setExStatus("Searching Tron...");
-        const r = await tronLookupTx(hash.replace("0x",""));
-        if (r) { addRecent(hash,"tron"); return setExResult(r); }
+
+      // ── If user selected Bitcoin explicitly ──
+      if (exFam === "bitcoin") {
+        setExStatus("Searching Bitcoin Mainnet...");
+        const r = await btcLookupTx(h.replace(/^0x/,""));
+        if (r) { addRecent(h,"bitcoin"); return setExResult(r); }
       }
-      // EVM — search selected family FIRST in parallel, then remaining
+
+      // ── EVM hash format (0x + 64 hex) ──
       if (isEVM) {
-        const priority = fam?.chains?.length ? fam.chains : Object.keys(BLOCKSCOUT);
+        const priority = fam?.chains?.length && exFam !== "tron" ? fam.chains : Object.keys(BLOCKSCOUT);
         const rest = Object.keys(BLOCKSCOUT).filter(c=>!priority.includes(c));
 
-        setExStatus(`Searching chains in parallel...`);
-        // Race all priority chains — return whichever finds it first
-        const found = await raceFirst(priority.map(c=>evmLookupTx(c,hash)));
-        if (found) { addRecent(hash, found.chain); return setExResult(found); }
+        setExStatus(`Searching ${priority.length} EVM chains in parallel...`);
+        const found = await raceFirst(priority.map(c=>evmLookupTx(c,h)));
+        if (found) { addRecent(h, found.chain); return setExResult(found); }
 
         if (rest.length) {
-          setExStatus(`Expanding search to ${rest.length} more chains...`);
-          const found2 = await raceFirst(rest.map(c=>evmLookupTx(c,hash)));
-          if (found2) { addRecent(hash, found2.chain); return setExResult(found2); }
+          setExStatus(`Checking ${rest.length} more EVM chains...`);
+          const found2 = await raceFirst(rest.map(c=>evmLookupTx(c,h)));
+          if (found2) { addRecent(h, found2.chain); return setExResult(found2); }
         }
 
-        // Try Tron with 0x-stripped hash
-        setExStatus("Checking Tron...");
-        const tron = await tronLookupTx(hash.replace("0x",""));
-        if (tron) { addRecent(hash,"tron"); return setExResult(tron); }
+        // EVM hash can also be a Tron hash — try it
+        setExStatus("Checking Tron (same hash format as EVM)...");
+        const tron = await tronLookupTx(h.replace(/^0x/,""));
+        if (tron) { addRecent(h,"tron"); return setExResult(tron); }
       }
-      setExError("Transaction not found on any supported blockchain.\n\nCheck:\n• Correct chain family selected\n• Hash is complete (0x + 64 hex for EVM)\n• Very recent txns may take ~30s to index");
+
+      // ── 64-hex without 0x prefix — could be Bitcoin or Tron ──
+      if (isBTC) {
+        setExStatus("Searching Bitcoin...");
+        const btc = await btcLookupTx(h);
+        if (btc) { addRecent(h,"bitcoin"); return setExResult(btc); }
+
+        setExStatus("Searching Tron (64-hex format)...");
+        const tron = await tronLookupTx(h);
+        if (tron) { addRecent(h,"tron"); return setExResult(tron); }
+      }
+
+      setExError(
+        "Transaction not found on any supported blockchain.\n\n" +
+        "Tips:\n" +
+        "• EVM (Ethereum/Base/BNB etc): needs 0x + 64 hex chars\n" +
+        "• Tron: 64 hex chars WITHOUT 0x prefix\n" +
+        "• Bitcoin: 64 hex chars WITHOUT 0x prefix\n" +
+        "• Solana: Base58 signature (~87 chars)\n" +
+        "• Very recent transactions may take 30–60s to index"
+      );
     } catch(e) {
       setExError("Search failed: "+(e.message||"Unknown error"));
     } finally { setExLoading(false); setExStatus(""); }
@@ -361,7 +469,7 @@ export default function App() {
         const txs = await tronWalletHistory(addr);
         return setWhResult({address:addr,transactions:txs,count:txs.length,chainsSearched:["Tron"],source:"TronGrid"});
       }
-      // EVM — all 8 chains in parallel
+      // EVM — all 8 EVM chains searched in parallel (+ BTC, Solana, Tron handled above)
       const chains = Object.keys(BLOCKSCOUT);
       const results = await Promise.allSettled(chains.map(c=>evmWalletHistory(c,addr)));
       let all = [];
@@ -560,7 +668,7 @@ export default function App() {
               <HintTag>auto-detected — EVM · Bitcoin · Solana · Tron</HintTag>
             </FieldLabel>
             <div style={{marginBottom:6,fontSize:"0.7rem",color:"rgba(255,255,255,0.2)"}}>
-              {addrInput.startsWith("0x")?"⟠ EVM address detected — will search all 8 EVM chains":
+              {addrInput.startsWith("0x")?"⟠ EVM address detected — searching Ethereum, Sepolia, Base, Optimism, Arbitrum, Linea, Polygon, BNB":
                addrInput.match(/^(1|3|bc1)/)?"₿ Bitcoin address detected":
                addrInput.startsWith("T")&&addrInput.length===34?"⬤ Tron address detected":
                addrInput.length>30&&!addrInput.startsWith("0x")?"◎ Solana address detected":
