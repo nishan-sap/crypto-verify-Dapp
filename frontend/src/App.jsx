@@ -50,34 +50,96 @@ const normStatus = (isError, raw) => {
   return "Success";
 };
 
-// ── EVM TX lookup (Blockscout) ────────────────────
-async function evmLookupTx(chainId, hash) {
-  const c = BLOCKSCOUT[chainId];
+// ── JSON-RPC fallback endpoints for EVM chains ────
+const RPC_FALLBACK = {
+  bnb:      "https://bsc-dataseed1.binance.org/",
+  polygon:  "https://polygon-rpc.com/",
+  arbitrum: "https://arb1.arbitrum.io/rpc",
+  op:       "https://mainnet.optimism.io",
+  base:     "https://mainnet.base.org",
+  linea:    "https://rpc.linea.build",
+  ethereum: "https://cloudflare-eth.com",
+  sepolia:  "https://rpc.sepolia.org",
+};
+
+async function rpcGetTx(chainId, hash) {
+  const rpc = RPC_FALLBACK[chainId];
+  if (!rpc) return null;
   try {
-    const r = await ft(`${c.url}?module=transaction&action=gettxinfo&txhash=${hash}`);
+    const r = await ft(rpc, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({jsonrpc:"2.0",id:1,method:"eth_getTransactionByHash",params:[hash]})
+    }, 10000);
     const d = await r.json();
-    if (d.status !== "1" || !d.result) return null;
+    if (!d.result) return null;
     const tx = d.result;
-    const raw = parseInt(tx.value||"0");
+    const c = BLOCKSCOUT[chainId];
+    const raw = parseInt(tx.value||"0x0",16);
+
+    // Also get receipt for status
+    const r2 = await ft(rpc, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({jsonrpc:"2.0",id:2,method:"eth_getTransactionReceipt",params:[hash]})
+    }, 10000);
+    const d2 = await r2.json();
+    const receipt = d2.result;
+    const status = receipt?.status === "0x1" ? "Success" : receipt?.status === "0x0" ? "Failed" : "Confirmed";
+
     return {
       found:true, chain:chainId, network:c.name, symbol:c.symbol,
-      chainColor: c.color, txHash:hash,
-      from: tx.from, to: tx.to || "Contract Creation",
+      chainColor:c.color, txHash:hash,
+      from: tx.from,
+      to: tx.to || "Contract Creation",
       value: raw > 0 ? (raw/1e18).toFixed(raw < 1e15 ? 8 : 6)+" "+c.symbol : "0 "+c.symbol,
-      blockNumber: tx.blockNumber,
-      confirmations: tx.confirmations ? Number(tx.confirmations).toLocaleString() : "Confirmed",
-      timestamp: tx.timeStamp ? new Date(parseInt(tx.timeStamp)*1000) : null,
-      status: normStatus(tx.isError, tx.txreceipt_status),
-      gasUsed: tx.gasUsed ? Number(tx.gasUsed).toLocaleString() : null,
-      gasPrice: tx.gasPrice ? (parseInt(tx.gasPrice)/1e9).toFixed(4)+" Gwei" : null,
-      gasFee: (tx.gasUsed && tx.gasPrice) ? ((parseInt(tx.gasUsed)*parseInt(tx.gasPrice))/1e18).toFixed(8)+" "+c.symbol : null,
-      nonce: tx.nonce,
+      blockNumber: parseInt(tx.blockNumber||"0x0",16).toString(),
+      confirmations: "Confirmed",
+      timestamp: null,
+      status,
+      gasUsed: receipt?.gasUsed ? parseInt(receipt.gasUsed,16).toLocaleString() : null,
+      gasPrice: tx.gasPrice ? (parseInt(tx.gasPrice,16)/1e9).toFixed(4)+" Gwei" : null,
+      gasFee: (receipt?.gasUsed && tx.gasPrice)
+        ? ((parseInt(receipt.gasUsed,16)*parseInt(tx.gasPrice,16))/1e18).toFixed(8)+" "+c.symbol : null,
+      nonce: parseInt(tx.nonce||"0x0",16).toString(),
       type: tx.input && tx.input !== "0x" ? "Contract Interaction" : "ETH Transfer",
-      verifiedBy: c.url.replace("https://","").split("/")[0],
-      explorerUrl: c.explorer + hash,
+      verifiedBy: rpc.replace("https://","").split("/")[0]+" (RPC)",
+      explorerUrl: c.explorer+hash,
       addrExplorer: c.addrExp,
     };
   } catch { return null; }
+}
+
+// ── EVM TX lookup (Blockscout first, RPC fallback) ─
+async function evmLookupTx(chainId, hash) {
+  const c = BLOCKSCOUT[chainId];
+  // Try Blockscout first
+  try {
+    const r = await ft(`${c.url}?module=transaction&action=gettxinfo&txhash=${hash}`, {}, 8000);
+    const d = await r.json();
+    if (d.status === "1" && d.result) {
+      const tx = d.result;
+      const raw = parseInt(tx.value||"0");
+      return {
+        found:true, chain:chainId, network:c.name, symbol:c.symbol,
+        chainColor:c.color, txHash:hash,
+        from: tx.from, to: tx.to || "Contract Creation",
+        value: raw > 0 ? (raw/1e18).toFixed(raw < 1e15 ? 8 : 6)+" "+c.symbol : "0 "+c.symbol,
+        blockNumber: tx.blockNumber,
+        confirmations: tx.confirmations ? Number(tx.confirmations).toLocaleString() : "Confirmed",
+        timestamp: tx.timeStamp ? new Date(parseInt(tx.timeStamp)*1000) : null,
+        status: normStatus(tx.isError, tx.txreceipt_status),
+        gasUsed: tx.gasUsed ? Number(tx.gasUsed).toLocaleString() : null,
+        gasPrice: tx.gasPrice ? (parseInt(tx.gasPrice)/1e9).toFixed(4)+" Gwei" : null,
+        gasFee: (tx.gasUsed && tx.gasPrice) ? ((parseInt(tx.gasUsed)*parseInt(tx.gasPrice))/1e18).toFixed(8)+" "+c.symbol : null,
+        nonce: tx.nonce,
+        type: tx.input && tx.input !== "0x" ? "Contract Interaction" : "ETH Transfer",
+        verifiedBy: c.url.replace("https://","").split("/")[0],
+        explorerUrl: c.explorer+hash,
+        addrExplorer: c.addrExp,
+      };
+    }
+  } catch {}
+  // Blockscout failed — try direct JSON-RPC
+  return await rpcGetTx(chainId, hash);
 }
 
 // ── EVM wallet history ────────────────────────────
@@ -150,6 +212,8 @@ const SOL_RPCS = [
   "https://api.mainnet-beta.solana.com",
   "https://solana-mainnet.g.alchemy.com/v2/demo",
   "https://rpc.ankr.com/solana",
+  "https://solana.public-rpc.com",
+  "https://api.devnet.solana.com",  // fallback for devnet sigs
 ];
 
 async function solRPC(method, params) {
@@ -158,7 +222,7 @@ async function solRPC(method, params) {
       const r = await ft(url, {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({jsonrpc:"2.0", id:1, method, params})
-      }, 10000);
+      }, 14000);
       const d = await r.json();
       if (d.result !== undefined && d.result !== null) return d.result;
     } catch {}
