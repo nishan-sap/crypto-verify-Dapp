@@ -1,29 +1,42 @@
 {
-  "name": "crypto-verify-dapp",
-  "version": "2.0.0",
-  "description": "Multi-Chain Blockchain Transaction Verifier DApp - CN6035",
+  "name": "cn6035-cryptoverify",
+  "version": "1.0.0",
+  "description": "CryptoVerify — Multi-Chain Blockchain Transaction Verifier DApp. CN6035 — Nishan Sapkota.",
+  "private": true,
   "scripts": {
+    "test": "hardhat test test/TransactionVerifier.unit.test.js",
+    "test:unit": "hardhat test test/TransactionVerifier.unit.test.js",
+    "test:integration": "hardhat test test/TransactionVerifier.test.js --network sepolia",
+    "test:all": "npm run test:unit && npm run test:integration",
     "compile": "hardhat compile",
     "deploy": "hardhat run scripts/deploy.js --network sepolia",
-    "test": "hardhat test",
-    "server": "node backend/server.js",
-    "lint": "eslint backend/ scripts/"
-  },
-  "devDependencies": {
-    "@nomicfoundation/hardhat-chai-matchers": "2.0.8",
-    "@nomicfoundation/hardhat-ethers": "3.0.8",
-    "chai": "4.4.1",
-    "eslint": "^10.0.2",
-    "ethers": "6.13.5",
-    "hardhat": "2.22.17"
+    "seed": "node scripts/seed_contract.js",
+    "indexer": "node backend/indexer.js",
+    "lint": "eslint backend/ scripts/",
+    "lint:sol": "solhint 'contracts/**/*.sol'",
+    "format": "prettier --write 'contracts/**/*.sol' 'backend/**/*.js' 'scripts/**/*.js'",
+    "format:check": "prettier --check 'contracts/**/*.sol' 'backend/**/*.js' 'scripts/**/*.js'"
   },
   "dependencies": {
-    "cors": "2.8.5",
-    "dotenv": "16.4.5",
-    "ethers": "6.13.5",
-    "express": "4.21.2",
-    "express-rate-limit": "^7.5.1",
-    "helmet": "^8.1.0",
+    "@openzeppelin/contracts": "^5.3.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "ethers": "^6.13.5",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
     "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "@nomicfoundation/hardhat-chai-matchers": "^2.0.8",
+    "@nomicfoundation/hardhat-ethers": "^3.0.8",
+    "chai": "^4.5.0",
+    "eslint": "^9.18.0",
+    "globals": "^16.0.0",
+    "hardhat": "^2.22.17",
+    "prettier": "^3.5.3",
+    "prettier-plugin-solidity": "^1.4.2",
+    "solhint": "^5.1.0"
   }
 }

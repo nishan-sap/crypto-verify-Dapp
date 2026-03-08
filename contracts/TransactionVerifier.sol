@@ -1,65 +1,71 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
 /**
  * @title TransactionVerifier
- * @dev Records and verifies crypto transactions on the blockchain
- * @author Nishan Sapkota - CN6035
+ * @dev Records and verifies crypto transactions on the blockchain.
+ *      Uses ReentrancyGuard to prevent re-entrancy attacks.
+ *      Uses call() instead of transfer() to avoid gas stipend issues.
+ * @author Nishan Sapkota — CN6035
  */
-contract TransactionVerifier {
+contract TransactionVerifier is ReentrancyGuard, Ownable {
 
-    // Structure to store each transaction
+    // ── Data structures ───────────────────────────────────────────
     struct Transaction {
         address sender;
         address receiver;
         uint256 amount;
         uint256 timestamp;
-        string message;
-        bool exists;
+        string  message;
+        bool    exists;
     }
 
-    // Owner of the contract
-    address public owner;
-
-    // Map transaction ID to Transaction data
+    // ── Storage ───────────────────────────────────────────────────
     mapping(bytes32 => Transaction) private transactions;
-
-    // Store all transaction IDs per wallet address
-    mapping(address => bytes32[]) private walletHistory;
-
-    // Total transactions recorded
+    mapping(address => bytes32[])   private walletHistory;
     uint256 public totalTransactions;
 
-    // Events
+    // ── Events ────────────────────────────────────────────────────
     event TransactionRecorded(
         bytes32 indexed txId,
         address indexed sender,
         address indexed receiver,
         uint256 amount,
-        string message
+        string  message
     );
 
-    // Constructor
-    constructor() {
-        owner = msg.sender;
-    }
+    // ── Custom errors (gas-efficient vs require strings) ──────────
+    error ZeroValue();
+    error InvalidReceiver();
+    error SelfTransfer();
+    error TransferFailed();
+
+    // ── Constructor ───────────────────────────────────────────────
+    constructor() Ownable(msg.sender) {}
+
+    // ── Functions ─────────────────────────────────────────────────
 
     /**
-     * @dev Send ETH and record it on the blockchain
-     * @param _receiver The wallet address receiving the ETH
-     * @param _message Optional note with the transaction
+     * @dev Send ETH and record it on-chain.
+     *      nonReentrant guard prevents re-entrancy attacks.
+     *      Uses call() instead of transfer() to avoid 2300-gas-stipend issues.
+     * @param _receiver  Wallet address receiving the ETH
+     * @param _message   Optional note stored with the transaction
+     * @return txId      Unique bytes32 identifier for this transaction
      */
     function sendAndRecord(
         address payable _receiver,
-        string memory _message
-    ) external payable returns (bytes32 txId) {
+        string calldata _message
+    ) external payable nonReentrant returns (bytes32 txId) {
 
-        // Must send more than 0
-        require(msg.value > 0, "Must send some ETH");
-        require(_receiver != address(0), "Invalid receiver address");
-        require(_receiver != msg.sender, "Cannot send to yourself");
+        if (msg.value == 0)                        revert ZeroValue();
+        if (_receiver == address(0))               revert InvalidReceiver();
+        if (_receiver == msg.sender)               revert SelfTransfer();
 
-        // Generate unique transaction ID
+        // Generate deterministic unique ID
         txId = keccak256(abi.encodePacked(
             msg.sender,
             _receiver,
@@ -68,7 +74,7 @@ contract TransactionVerifier {
             totalTransactions
         ));
 
-        // Record on blockchain
+        // Write state BEFORE transferring ETH (checks-effects-interactions)
         transactions[txId] = Transaction({
             sender:    msg.sender,
             receiver:  _receiver,
@@ -78,56 +84,52 @@ contract TransactionVerifier {
             exists:    true
         });
 
-        // Add to both wallets history
         walletHistory[msg.sender].push(txId);
         walletHistory[_receiver].push(txId);
-
         totalTransactions++;
 
-        // Actually send the ETH to receiver
-        _receiver.transfer(msg.value);
+        // Transfer ETH using call() — safer than transfer()
+        (bool success, ) = _receiver.call{value: msg.value}("");
+        if (!success) revert TransferFailed();
 
-        // Emit event with message
         emit TransactionRecorded(txId, msg.sender, _receiver, msg.value, _message);
-
-        return txId;
     }
 
     /**
-     * @dev Verify a transaction - FREE to call, no gas needed
-     * @param _txId The transaction ID to verify
+     * @dev Verify a transaction by its ID — view function, zero gas cost for callers.
+     * @param _txId  The bytes32 transaction ID
      */
     function verifyTransaction(bytes32 _txId)
-        external
-        view
+        external view
         returns (
             address sender,
             address receiver,
             uint256 amount,
             uint256 timestamp,
             string memory message,
-            bool exists
+            bool    exists
         )
     {
-        Transaction memory txData = transactions[_txId];
-        return (
-        txData.sender,
-        txData.receiver,
-        txData.amount,
-        txData.timestamp,
-        txData.message,
-        txData.exists
-    );
+        Transaction memory t = transactions[_txId];
+        return (t.sender, t.receiver, t.amount, t.timestamp, t.message, t.exists);
     }
 
     /**
-     * @dev Get all transaction IDs for a wallet address
+     * @dev Get all transaction IDs for a wallet — view function, zero gas.
+     * @param _wallet  Wallet address to query
      */
     function getWalletHistory(address _wallet)
-        external
-        view
+        external view
         returns (bytes32[] memory)
     {
         return walletHistory[_wallet];
+    }
+
+    /**
+     * @dev Emergency withdrawal — owner only, for stuck ETH if any.
+     */
+    function emergencyWithdraw() external onlyOwner {
+        (bool ok, ) = owner().call{value: address(this).balance}("");
+        if (!ok) revert TransferFailed();
     }
 }
