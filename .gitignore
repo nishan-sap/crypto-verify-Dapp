@@ -10,6 +10,12 @@ node_modules/
 artifacts/
 cache/
 
+# Indexer runtime output (auto-created by backend/indexer.js)
+data/
+
+# Frontend build output
+dist/
+
 # Logs
 logs/
 *.log

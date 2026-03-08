@@ -27,15 +27,12 @@ npm install
 
 ## Step 2 — Set up environment variables
 
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and fill in:
+Create a `.env` file in the project root and fill in:
 
 ```
 SEPOLIA_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/YOUR_KEY
 PRIVATE_KEY=0xYOUR_WALLET_PRIVATE_KEY
+CONTRACT_ADDRESS=0x04BDEeDE281D1c0b63449CAc4EDc30d9b2B369aE
 ```
 
 Get Sepolia test ETH free at: https://sepoliafaucet.com/
@@ -80,10 +77,7 @@ Deploying TransactionVerifier to Sepolia...
 | Deployer Wallet | `0xF243B88178E5EBDEc624dD0a9618C83cc2Cb1c4e` |
 | Network | Ethereum Sepolia TestNet (chainId: 11155111) |
 | Deploy TX | View on [Sepolia Etherscan ↗](https://sepolia.etherscan.io/address/0x04BDEeDE281D1c0b63449CAc4EDc30d9b2B369aE) |
-| Block Explorer | https://eth-sepolia.blockscout.com/address/0x04BDEeDE... |
 | Compiler | Solidity 0.8.28 |
-
-Update `CONTRACT_ADDRESS` in your `.env` file with the new address.
 
 ---
 
@@ -101,7 +95,6 @@ Seeding 3 transactions to TransactionVerifier...
 
 ✅ Payment 1 sent!
    ETH hash:  0xf86bdb83e6207b830a7fbc280361c8d0d3d348fb61c6aa68f24b6c0c43b3bd68
-   bytes32 ID: 0x...
    Block:     10397680
    Amount:    0.001 ETH
 
@@ -131,35 +124,21 @@ npx hardhat test test/TransactionVerifier.unit.test.js
 **Expected output:**
 ```
   TransactionVerifier — Local Unit Tests
-
-    Deployment
-      ✓ U1. Contract deploys with zero transactions
-      ✓ U2. Owner is set to deployer address
-
-    sendAndRecord — happy path
-      ✓ U3. Records a transaction and increments totalTransactions
-      ✓ U4. Transfers ETH to the receiver
-      ✓ U5. verifyTransaction returns correct fields
-      ✓ U6. Both sender and receiver appear in wallet history
-      ✓ U7. Multiple transactions accumulate correctly
-      ✓ U8. Emits TransactionRecorded event with correct args
-
-    sendAndRecord — revert cases
-      ✓ U9.  Reverts when ETH value is zero
-      ✓ U10. Reverts when receiver is zero address
-      ✓ U11. Reverts when sender == receiver (self-transfer)
-
-    verifyTransaction — edge cases
-      ✓ U12. Returns exists=false for unknown txId
-
-    getWalletHistory — edge cases
-      ✓ U13. Returns empty array for wallet with no transactions
-
-    Security — Re-entrancy guard
-      ✓ U14. Malicious receiver cannot re-enter sendAndRecord
-
-    Access control — Ownable
-      ✓ U15. emergencyWithdraw reverts for non-owner
+    ✓ U1. Contract deploys with zero transactions
+    ✓ U2. Owner is set to deployer address
+    ✓ U3. Records a transaction and increments totalTransactions
+    ✓ U4. Transfers ETH to the receiver
+    ✓ U5. verifyTransaction returns correct fields
+    ✓ U6. Both sender and receiver appear in wallet history
+    ✓ U7. Multiple transactions accumulate correctly
+    ✓ U8. Emits TransactionRecorded event with correct args
+    ✓ U9.  Reverts when ETH value is zero
+    ✓ U10. Reverts when receiver is zero address
+    ✓ U11. Reverts when sender == receiver (self-transfer)
+    ✓ U12. Returns exists=false for unknown txId
+    ✓ U13. Returns empty array for wallet with no transactions
+    ✓ U14. Malicious receiver cannot re-enter sendAndRecord
+    ✓ U15. emergencyWithdraw reverts for non-owner
 
   15 passing (3s)
 ```
@@ -173,6 +152,7 @@ npx hardhat test test/TransactionVerifier.test.js --network sepolia
 ```
   TransactionVerifier — Real Sepolia Contract Tests
     ✓ 1. Contract is deployed and has bytecode on Sepolia
+    ✓ 2. Contract records exactly 3 transactions
     ...
   10 passing (4s)
 ```
@@ -187,7 +167,7 @@ Listens for on-chain events and saves them locally:
 node backend/indexer.js
 ```
 
-Output is saved to `data/transactions.json`.
+Output is saved to `data/transactions.json` (auto-created at runtime).
 
 ---
 
@@ -195,8 +175,6 @@ Output is saved to `data/transactions.json`.
 
 ```bash
 cd frontend
-cp .env.example .env
-# Edit frontend/.env — set VITE_CONTRACT_ADDRESS
 npm install
 npm run deploy
 ```
@@ -205,17 +183,20 @@ Live at: **https://nishan-sap.github.io/crypto-verify-Dapp/**
 
 ---
 
-## Step 9 — Run ESLint (code quality)
+## Step 9 — Run code quality tools
 
 ```bash
 # Root (backend + scripts)
 npm run lint
 
-# Frontend
-cd frontend && npm run lint
-
 # Solidity
 npx solhint 'contracts/**/*.sol'
+
+# Prettier format check
+npm run format:check
+
+# Frontend lint
+cd frontend && npm run lint
 ```
 
 ---
