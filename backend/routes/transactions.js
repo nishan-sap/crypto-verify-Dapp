@@ -1,6 +1,6 @@
 const express = require("express");
 const { ethers } = require("ethers");
-require("dotenv").config();
+require("dotenv").config({ path: require("path").resolve(__dirname, "../../.env") });
 const router = express.Router();
 
 // ═══════════════════════════════════════════════════════════════
