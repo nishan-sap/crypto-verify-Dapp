@@ -68,7 +68,7 @@ async function main() {
   console.log("\nTotal AFTER:", totalAfter.toString());
 
   console.log("\n\n========================================");
-  console.log("PASTE THIS OUTPUT BACK TO CLAUDE");
+  console.log("COPY THIS OUTPUT INTO YOUR TEST FILE");
   console.log("========================================");
   console.log(`SENDER=${signer.address}`);
   console.log(`RECEIVER=${RECEIVER}`);

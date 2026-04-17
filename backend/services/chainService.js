@@ -1,7 +1,7 @@
 /**
  * backend/services/chainService.js
  * ─────────────────────────────────────────────────────────────────
- * CryptoVerify — Blockchain Service Layer
+ * NSTCrypto — Blockchain Service Layer
  * CN6035 — Nishan Sapkota
  *
  * This module contains ALL business logic for querying blockchains.
@@ -96,7 +96,7 @@ async function safeFetch(url, options = {}) {
     const res = await fetch(url, {
       ...options,
       signal: controller.signal,
-      headers: { "User-Agent": "CryptoVerify/3.0", ...(options.headers || {}) }
+      headers: { "User-Agent": "NSTCrypto/1.0", ...(options.headers || {}) }
     });
     return res;
   } catch (err) {

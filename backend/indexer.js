@@ -1,7 +1,7 @@
 /**
  * backend/indexer.js
  * ─────────────────────────────────────────────────────────────────
- * CryptoVerify — On-Chain Event Indexer
+ * NSTCrypto — On-Chain Event Indexer
  * CN6035 — Nishan Sapkota
  *
  * Listens for TransactionRecorded events from the deployed
@@ -143,7 +143,7 @@ async function startLiveListener(provider, contract, index) {
 
 async function main() {
   console.log("═══════════════════════════════════════════════════");
-  console.log("  CryptoVerify — On-Chain Event Indexer");
+  console.log("  NSTCrypto — On-Chain Event Indexer");
   console.log("  Contract:", CONTRACT_ADDRESS);
   console.log("  Network:  Sepolia TestNet");
   console.log("═══════════════════════════════════════════════════");

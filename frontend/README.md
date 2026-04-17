@@ -1,6 +1,6 @@
-# CryptoVerify — Frontend
+# NSTCrypto — Frontend
 
-React 19 + Vite 7 frontend for the CryptoVerify multi-chain DApp.
+React 19 + Vite 7 frontend for the NSTCrypto multi-chain DApp.
 
 ## Live Site
 https://nishan-sap.github.io/crypto-verify-Dapp/

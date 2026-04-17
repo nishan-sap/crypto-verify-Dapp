@@ -1,4 +1,4 @@
-# Deployment Guide — CryptoVerify DApp
+# Deployment Guide — NSTCrypto DApp
 
 **CN6035 — Nishan Sapkota**
 

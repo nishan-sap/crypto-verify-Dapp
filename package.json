@@ -1,7 +1,7 @@
 {
-  "name": "cn6035-cryptoverify",
+  "name": "cn6035-nstcrypto",
   "version": "1.0.0",
-  "description": "CryptoVerify — Multi-Chain Blockchain Transaction Verifier DApp. CN6035 — Nishan Sapkota.",
+  "description": "NSTCrypto — Multi-Chain Blockchain Explorer & OSINT Intelligence. CN6035 — Nishan Sapkota.",
   "private": true,
   "scripts": {
     "test": "hardhat test test/TransactionVerifier.unit.test.js",

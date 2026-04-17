@@ -1,7 +1,7 @@
 /**
  * backend/logger.js
  * ─────────────────────────────────────────────────────────────────
- * CryptoVerify — Structured Application Logger
+ * NSTCrypto — Structured Application Logger
  * CN6035 — Nishan Sapkota
  *
  * Uses Winston for structured, levelled logging.
