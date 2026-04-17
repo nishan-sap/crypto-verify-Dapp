@@ -317,7 +317,17 @@ function GasWidget() {
   useEffect(()=>{
     let mounted=true;
     async function fetchGas(){
-      const trySet=(s,a,f)=>{if(a>0&&mounted){setGas({slow:parseFloat(s.toFixed(1)),avg:parseFloat(a.toFixed(1)),fast:parseFloat(f.toFixed(1))});setLoading(false);return true;}return false;};
+      const fmt=v=>parseFloat(v.toFixed(3));
+      const trySet=(s,a,f)=>{if(a>0&&mounted){setGas({slow:fmt(s),avg:fmt(a),fast:fmt(f)});setLoading(false);return true;}return false;};
+      // eth_feeHistory — same source as Etherscan, real base fee
+      try{
+        const rpc=await fetch("https://ethereum.publicnode.com",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({jsonrpc:"2.0",method:"eth_feeHistory",params:["0x5","latest",[25,50,75]],id:1}),signal:AbortSignal.timeout(6000)});
+        const d=await rpc.json();
+        const fees=(d.result?.baseFeePerGas||[]).map(h=>parseInt(h,16)/1e9);
+        const base=fees.reduce((a,b)=>a+b,0)/fees.length;
+        if(trySet(base*0.9,base,base*1.3))return;
+      }catch{}
+      // fallback: Blockscout stats
       try{const r=await ft("https://eth.blockscout.com/api/v2/stats",{},8000);const d=await r.json();if(trySet(parseFloat(d?.gas_prices?.slow||0),parseFloat(d?.gas_prices?.average||0),parseFloat(d?.gas_prices?.fast||0)))return;}catch{}
       if(mounted)setLoading(false);
     }
