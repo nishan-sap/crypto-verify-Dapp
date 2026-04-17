@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
  * @title TransactionVerifier
@@ -24,8 +24,8 @@ contract TransactionVerifier is ReentrancyGuard, Ownable {
     }
 
     // ── Storage ───────────────────────────────────────────────────
-    mapping(bytes32 => Transaction) private transactions;
-    mapping(address => bytes32[])   private walletHistory;
+    mapping(bytes32 txId => Transaction tx) private transactions;
+    mapping(address wallet => bytes32[] ids) private walletHistory;
     uint256 public totalTransactions;
 
     // ── Events ────────────────────────────────────────────────────
@@ -96,6 +96,14 @@ contract TransactionVerifier is ReentrancyGuard, Ownable {
     }
 
     /**
+     * @dev Emergency withdrawal — owner only, for stuck ETH if any.
+     */
+    function emergencyWithdraw() external onlyOwner {
+        (bool ok, ) = owner().call{value: address(this).balance}("");
+        if (!ok) revert TransferFailed();
+    }
+
+    /**
      * @dev Verify a transaction by its ID — view function, zero gas cost for callers.
      * @param _txId  The bytes32 transaction ID
      */
@@ -123,13 +131,5 @@ contract TransactionVerifier is ReentrancyGuard, Ownable {
         returns (bytes32[] memory)
     {
         return walletHistory[_wallet];
-    }
-
-    /**
-     * @dev Emergency withdrawal — owner only, for stuck ETH if any.
-     */
-    function emergencyWithdraw() external onlyOwner {
-        (bool ok, ) = owner().call{value: address(this).balance}("");
-        if (!ok) revert TransferFailed();
     }
 }

@@ -318,7 +318,7 @@ function GasWidget() {
     let mounted=true;
     async function fetchGas(){
       const trySet=(s,a,f)=>{if(a>0&&mounted){setGas({slow:Math.max(1,Math.round(s)),avg:Math.max(1,Math.round(a)),fast:Math.max(1,Math.round(f))});setLoading(false);return true;}return false;};
-      try{const r=await ft("https://eth.blockscout.com/api?module=gastracker&action=gasoracle",{},8000);const d=await r.json();if(trySet(parseFloat(d?.result?.SafeGasPrice||0),parseFloat(d?.result?.ProposeGasPrice||0),parseFloat(d?.result?.FastGasPrice||0)))return;}catch{}
+      try{const r=await ft("https://eth.blockscout.com/api/v2/stats",{},8000);const d=await r.json();if(trySet(parseFloat(d?.gas_prices?.slow||0),parseFloat(d?.gas_prices?.average||0),parseFloat(d?.gas_prices?.fast||0)))return;}catch{}
       if(mounted)setLoading(false);
     }
     fetchGas();const iv=setInterval(fetchGas,30000);return()=>{mounted=false;clearInterval(iv);};
