@@ -20,11 +20,6 @@ contract ReentrancyAttacker {
         target = ITransactionVerifier(_target);
     }
 
-    function attack() external payable {
-        // First call — triggers sendAndRecord with this contract as receiver
-        target.sendAndRecord{value: msg.value}(payable(address(this)), "attack");
-    }
-
     // Re-entrancy attempt — called when this contract receives ETH
     receive() external payable {
         attackCount++;
@@ -32,5 +27,10 @@ contract ReentrancyAttacker {
             // Try to re-enter — should revert due to nonReentrant
             target.sendAndRecord{value: msg.value}(payable(msg.sender), "reenter");
         }
+    }
+
+    function attack() external payable {
+        // First call — triggers sendAndRecord with this contract as receiver
+        target.sendAndRecord{value: msg.value}(payable(address(this)), "attack");
     }
 }

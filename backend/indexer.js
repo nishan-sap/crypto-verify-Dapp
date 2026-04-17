@@ -15,8 +15,7 @@
 const { ethers } = require("ethers");
 const fs         = require("fs");
 const path       = require("path");
-require("dotenv").config();
-
+require("dotenv").config({ path: require("path").resolve(__dirname, "../.env") });
 // ── Config ────────────────────────────────────────────────────────
 const CONTRACT_ADDRESS = process.env.CONTRACT_ADDRESS
   || "0x04BDEeDE281D1c0b63449CAc4EDc30d9b2B369aE";
